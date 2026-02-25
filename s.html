@@ -1,0 +1,673 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>Mission Portfolio · Siddarthan R | Defence Intelligence</title>
+  <!-- Fonts & Libraries -->
+  <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;600;800&family=Rajdhani:wght@300;500;700&display=swap" rel="stylesheet">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js"></script>
+  <style>
+    /* ----- RESET & THEME ----- */
+    body, html {
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      font-family: 'Rajdhani', sans-serif;
+      background-color: #0a0f14;
+      color: #e0f7ff;
+      cursor: none; /* custom cursor effect via canvas */
+    }
+    * {
+      box-sizing: border-box;
+      user-select: none;
+    }
+    /* ----- MAIN CONTAINER ----- */
+    #scene-container {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100vw;
+      height: 100vh;
+      z-index: 1;
+    }
+    /* ----- OVERLAY ELEMENTS (all absolute, no pointer events by default) ----- */
+    .overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+      z-index: 10;
+    }
+    /* radar canvas */
+    #radar-canvas {
+      position: absolute;
+      top: 30px;
+      right: 30px;
+      width: 180px;
+      height: 180px;
+      border-radius: 50%;
+      border: 2px solid #00ffcc33;
+      box-shadow: 0 0 20px #00ffcc55, inset 0 0 20px #00b3ff33;
+      background: #0a0f14cc;
+      z-index: 15;
+      pointer-events: none;
+    }
+    /* grid overlay (defence targeting system) */
+    .grid-overlay {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background-image: 
+        linear-gradient(rgba(0, 255, 200, 0.08) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(0, 200, 255, 0.08) 1px, transparent 1px);
+      background-size: 40px 40px;
+      pointer-events: none;
+      z-index: 12;
+    }
+    /* cursor circuit canvas */
+    #cursor-canvas {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+      z-index: 20;
+    }
+    /* bottom control panel (buttons) */
+    .control-panel {
+      position: absolute;
+      bottom: 30px;
+      left: 0;
+      width: 100%;
+      display: flex;
+      justify-content: center;
+      gap: 15px;
+      flex-wrap: wrap;
+      padding: 0 20px;
+      z-index: 30;
+      pointer-events: all;
+    }
+    .mil-button {
+      font-family: 'Orbitron', sans-serif;
+      font-weight: 600;
+      font-size: 0.9rem;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      background: transparent;
+      border: 1.5px solid #00ffcc;
+      color: #00ffcc;
+      padding: 10px 18px;
+      border-radius: 4px;
+      box-shadow: 0 0 10px #00ffcc66, inset 0 0 8px #00b3ff33;
+      backdrop-filter: blur(4px);
+      cursor: pointer;
+      transition: 0.2s;
+      text-shadow: 0 0 5px #00ffcc;
+      min-width: 130px;
+    }
+    .mil-button:hover {
+      background: #00ffcc22;
+      border-color: #00b3ff;
+      color: #ffffff;
+      box-shadow: 0 0 20px #00b3ff, inset 0 0 12px #00ffcc;
+      transform: scale(1.05);
+    }
+    .mil-button:active {
+      transform: scale(0.98);
+    }
+    /* holographic content panel (hidden by default) */
+    .hologram-panel {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      width: 550px;
+      max-width: 80vw;
+      background: rgba(10, 15, 20, 0.75);
+      backdrop-filter: blur(12px);
+      border: 2px solid #00ffcc;
+      border-radius: 12px;
+      padding: 28px 24px;
+      color: #b0ffff;
+      font-family: 'Rajdhani', sans-serif;
+      box-shadow: 0 0 50px #00b3ff, inset 0 0 30px #00ffcc33;
+      z-index: 40;
+      pointer-events: all;
+      display: none;
+      transition: opacity 0.3s ease;
+      border-top: 4px solid #00ffcc;
+      border-left: 4px solid #00b3ff;
+    }
+    .hologram-panel.active {
+      display: block;
+      animation: panelGlow 1.5s infinite alternate;
+    }
+    @keyframes panelGlow {
+      0% { box-shadow: 0 0 40px #00b3ff, inset 0 0 20px #00ffcc66; }
+      100% { box-shadow: 0 0 70px #00ffcc, inset 0 0 40px #00b3ff; }
+    }
+    .panel-title {
+      font-family: 'Orbitron', sans-serif;
+      font-size: 1.8rem;
+      color: #00ffcc;
+      text-shadow: 0 0 15px cyan;
+      border-bottom: 1px dashed #00b3ff;
+      padding-bottom: 8px;
+      margin-bottom: 20px;
+      letter-spacing: 3px;
+    }
+    .panel-content {
+      font-size: 1.2rem;
+      line-height: 1.6;
+    }
+    .panel-content ul {
+      list-style: none;
+      padding: 0;
+    }
+    .panel-content li {
+      padding: 6px 0;
+      border-bottom: 1px solid #00b3ff33;
+    }
+    .close-panel {
+      position: absolute;
+      top: 12px;
+      right: 18px;
+      font-size: 28px;
+      color: #ff3b3b;
+      cursor: pointer;
+      text-shadow: 0 0 10px red;
+      background: none;
+      border: none;
+      font-family: 'Orbitron';
+      transform: rotate(45deg);
+      pointer-events: all;
+    }
+    .close-panel:hover {
+      color: #ff8888;
+    }
+    /* shockwave overlay (triggered during firing) */
+    .shockwave {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: radial-gradient(circle at var(--x, 50%) var(--y, 50%), rgba(0, 255, 200, 0.4) 0%, transparent 60%);
+      pointer-events: none;
+      z-index: 25;
+      opacity: 0;
+    }
+    /* tagline */
+    .tagline {
+      position: absolute;
+      bottom: 100px;
+      left: 30px;
+      font-family: 'Orbitron';
+      font-size: 0.9rem;
+      color: #00b3ff;
+      text-transform: uppercase;
+      writing-mode: vertical-rl;
+      letter-spacing: 4px;
+      z-index: 15;
+      pointer-events: none;
+      opacity: 0.7;
+    }
+    /* mobile tactical simplification */
+    @media (max-width: 800px) {
+      .mil-button { font-size: 0.7rem; padding: 6px 10px; min-width: 100px; }
+      .hologram-panel { width: 90vw; padding: 16px; }
+      .tagline { display: none; }
+      #radar-canvas { width: 120px; height: 120px; top: 10px; right: 10px; }
+    }
+  </style>
+</head>
+<body>
+  <div id="scene-container"></div>
+
+  <!-- overlays -->
+  <canvas id="radar-canvas" class="overlay"></canvas>
+  <div class="grid-overlay overlay"></div>
+  <canvas id="cursor-canvas" class="overlay"></canvas>
+  <div class="shockwave" id="shockwave"></div>
+  <div class="tagline">ENGINEERING DEFENCE INTELLIGENCE</div>
+
+  <!-- bottom control panel -->
+  <div class="control-panel">
+    <button class="mil-button" data-section="MISSION PROFILE">MISSION PROFILE</button>
+    <button class="mil-button" data-section="SKILLS">SKILLS</button>
+    <button class="mil-button" data-section="PROJECTS">PROJECTS</button>
+    <button class="mil-button" data-section="TARGET EXPERIENCE">TARGET EXPERIENCE</button>
+    <button class="mil-button" data-section="HOBBIES">HOBBIES</button>
+    <button class="mil-button" data-section="CONTACT">CONTACT</button>
+  </div>
+
+  <!-- hologram content panel -->
+  <div class="hologram-panel" id="hologram-panel">
+    <div class="close-panel" id="close-panel">✕</div>
+    <div class="panel-title" id="panel-title">MISSION PROFILE</div>
+    <div class="panel-content" id="panel-content"></div>
+  </div>
+
+  <script>
+    (function() {
+      // ----- DATA FROM JSON SPEC -----
+      const contentData = {
+        "MISSION PROFILE": {
+          name: "Siddarthan R",
+          designation: "B.E. Electronics and Communication Engineering - 3rd Year",
+          aspiration: "DRDO Research & Defence Systems Engineer",
+          mission_statement: "Aspiring Embedded Systems Engineer focused on defence communication security, AI-driven signal intelligence and anti-jamming technologies."
+        },
+        "SKILLS": {
+          core_skills: ["Embedded Systems Design", "Microcontrollers (ARM, STM32, Arduino)", "C Programming", "Signal Processing Fundamentals", "AI for Edge Devices", "RTOS Basics"],
+          defence_focus: ["Electronic Warfare Concepts", "Communication Systems", "Anti-Jamming Techniques", "Sensor Integration"]
+        },
+        "PROJECTS": {
+          project_1: {
+            title: "AI Based Anti-Jamming Detection Prototype",
+            description: "Prototype system that detects and classifies signal jamming attacks using AI-based signal pattern recognition.",
+            technologies_used: ["Embedded Microcontroller", "Signal Sampling", "Python Model for Classification", "Real-time Monitoring Dashboard"],
+            future_scope: "Deployable lightweight defence communication shield for military applications."
+          }
+        },
+        "TARGET EXPERIENCE": {
+          goal_organizations: ["DRDO", "Intel", "ISRO", "Defence Communication Labs"],
+          career_objective: "To design secure, intelligent and resilient embedded defence systems that strengthen national security infrastructure."
+        },
+        "HOBBIES": [
+          "Defence Technology Research",
+          "AI System Exploration",
+          "Embedded Hardware Experimentation",
+          "Strategic Thinking & Simulation Concepts"
+        ],
+        "CONTACT": {
+          email: "siddarthansince2004@gmail.com",
+          github: "https://github.com/STR004",
+          linkedin: "https://www.linkedin.com/in/siddarthan-ramaraj004",
+          contact_style: "Holographic communication panel"
+        }
+      };
+
+      // ----- THREE.JS SETUP -----
+      const container = document.getElementById('scene-container');
+      const scene = new THREE.Scene();
+      scene.background = new THREE.Color(0x0a0f14);
+      
+      const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 1000);
+      camera.position.set(4, 2, 8);
+      camera.lookAt(0, 0, 0);
+
+      const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false });
+      renderer.setSize(window.innerWidth, window.innerHeight);
+      renderer.shadowMap.enabled = false; // keep lightweight
+      renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+      container.appendChild(renderer.domElement);
+
+      // LIGHTS
+      const ambientLight = new THREE.AmbientLight(0x404060);
+      scene.add(ambientLight);
+      const dirLight = new THREE.DirectionalLight(0xaaccff, 1.2);
+      dirLight.position.set(2, 5, 5);
+      scene.add(dirLight);
+      const pointLight1 = new THREE.PointLight(0x00b3ff, 1, 15);
+      pointLight1.position.set(0, 2, 3);
+      scene.add(pointLight1);
+      const pointLight2 = new THREE.PointLight(0x00ffcc, 0.8, 15);
+      pointLight2.position.set(-2, 1, 4);
+      scene.add(pointLight2);
+
+      // GRID (defence style)
+      const gridHelper = new THREE.GridHelper(15, 30, 0x00ffcc, 0x004466);
+      gridHelper.position.y = -1.2;
+      scene.add(gridHelper);
+      
+      // subtle floating particles (smoke/static)
+      const particleGeo = new THREE.BufferGeometry();
+      const particleCount = 300;
+      const positions = new Float32Array(particleCount * 3);
+      for (let i = 0; i < particleCount; i++) {
+        positions[i*3] = (Math.random() - 0.5) * 12;
+        positions[i*3+1] = (Math.random() - 0.5) * 8;
+        positions[i*3+2] = (Math.random() - 0.5) * 10 - 5;
+      }
+      particleGeo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+      const particleMat = new THREE.PointsMaterial({ color: 0x88aaff, size: 0.05, transparent: true, opacity: 0.3 });
+      const particles = new THREE.Points(particleGeo, particleMat);
+      scene.add(particles);
+
+      // ----- CANNON CONSTRUCTION (simplified but iconic) -----
+      const cannonGroup = new THREE.Group();
+      
+      // base
+      const baseGeo = new THREE.CylinderGeometry(1.3, 1.6, 0.4, 32);
+      const baseMat = new THREE.MeshStandardMaterial({ color: 0x224466, emissive: 0x113355, roughness: 0.4, metalness: 0.7 });
+      const base = new THREE.Mesh(baseGeo, baseMat);
+      base.position.y = -1.0;
+      cannonGroup.add(base);
+      
+      // turret ring
+      const ringGeo = new THREE.TorusGeometry(0.9, 0.1, 16, 32);
+      const ringMat = new THREE.MeshStandardMaterial({ color: 0x00b3ff, emissive: 0x004466 });
+      const ring = new THREE.Mesh(ringGeo, ringMat);
+      ring.rotation.x = Math.PI/2;
+      ring.position.y = -0.7;
+      cannonGroup.add(ring);
+      
+      // main body
+      const bodyGeo = new THREE.BoxGeometry(1.6, 0.8, 1.2);
+      const bodyMat = new THREE.MeshStandardMaterial({ color: 0x2a4a6a, emissive: 0x112233 });
+      const body = new THREE.Mesh(bodyGeo, bodyMat);
+      body.position.y = -0.3;
+      cannonGroup.add(body);
+      
+      // barrel group (to rotate independently)
+      const barrelGroup = new THREE.Group();
+      barrelGroup.position.y = -0.1;
+      
+      // barrel cylinder
+      const barrelGeo = new THREE.CylinderGeometry(0.35, 0.4, 2.0, 16);
+      const barrelMat = new THREE.MeshStandardMaterial({ color: 0x3a6a9a, emissive: 0x113355 });
+      const barrel = new THREE.Mesh(barrelGeo, barrelMat);
+      barrel.rotation.z = Math.PI/2;
+      barrel.position.set(1.2, 0.2, 0);
+      barrelGroup.add(barrel);
+      
+      // muzzle detail
+      const muzzleGeo = new THREE.SphereGeometry(0.45, 8);
+      const muzzleMat = new THREE.MeshStandardMaterial({ color: 0xaa5555, emissive: 0x441111 });
+      const muzzle = new THREE.Mesh(muzzleGeo, muzzleMat);
+      muzzle.position.set(2.3, 0.2, 0);
+      barrelGroup.add(muzzle);
+      
+      // additional rings
+      const ring2Geo = new THREE.TorusGeometry(0.45, 0.05, 8, 16);
+      const ring2Mat = new THREE.MeshStandardMaterial({ color: 0x00ffcc, emissive: 0x004444 });
+      const ring2 = new THREE.Mesh(ring2Geo, ring2Mat);
+      ring2.rotation.y = Math.PI/2;
+      ring2.position.set(1.8, 0.2, 0);
+      barrelGroup.add(ring2);
+      
+      cannonGroup.add(barrelGroup);
+      
+      // energy capacitors (sides)
+      const capGeo = new THREE.BoxGeometry(0.4, 0.4, 0.4);
+      const capMat = new THREE.MeshStandardMaterial({ color: 0x00b3ff, emissive: 0x004488 });
+      const capLeft = new THREE.Mesh(capGeo, capMat);
+      capLeft.position.set(-0.5, 0.0, 0.9);
+      cannonGroup.add(capLeft);
+      const capRight = new THREE.Mesh(capGeo, capMat);
+      capRight.position.set(-0.5, 0.0, -0.9);
+      cannonGroup.add(capRight);
+      
+      scene.add(cannonGroup);
+
+      // store reference to parts for animation
+      const cannonParts = {
+        group: cannonGroup,
+        barrelGroup: barrelGroup,
+        muzzle: muzzle,
+        ring: ring,
+        caps: [capLeft, capRight]
+      };
+
+      // add a targeting reticle (floating)
+      const reticleGeo = new THREE.RingGeometry(0.5, 0.6, 64);
+      const reticleMat = new THREE.MeshStandardMaterial({ color: 0x00ffcc, emissive: 0x004444, side: THREE.DoubleSide, transparent: true, opacity: 0.4 });
+      const reticle = new THREE.Mesh(reticleGeo, reticleMat);
+      reticle.rotation.x = -Math.PI/2;
+      reticle.position.y = 0.1;
+      scene.add(reticle);
+
+      // ----- ANIMATION LOOP -----
+      function animate() {
+        requestAnimationFrame(animate);
+        
+        // rotate particles slowly
+        particles.rotation.y += 0.0002;
+        particles.rotation.x += 0.0001;
+        
+        // subtle cannon idle (barely noticeable)
+        const time = Date.now() * 0.002;
+        cannonGroup.position.y = Math.sin(time) * 0.03;
+        
+        renderer.render(scene, camera);
+      }
+      animate();
+
+      // ----- RADAR SWEEP (canvas) -----
+      const radarCanvas = document.getElementById('radar-canvas');
+      const ctx = radarCanvas.getContext('2d');
+      let radarAngle = 0;
+      function drawRadar() {
+        const w = radarCanvas.width, h = radarCanvas.height;
+        ctx.clearRect(0, 0, w, h);
+        
+        // background
+        ctx.beginPath();
+        ctx.arc(w/2, h/2, w/2-4, 0, 2*Math.PI);
+        ctx.strokeStyle = '#00ffcc';
+        ctx.lineWidth = 1.5;
+        ctx.stroke();
+        
+        // cross
+        ctx.beginPath();
+        ctx.moveTo(w/2, 6); ctx.lineTo(w/2, h-6);
+        ctx.moveTo(6, h/2); ctx.lineTo(w-6, h/2);
+        ctx.strokeStyle = '#00b3ff66';
+        ctx.stroke();
+        
+        // rotating line
+        ctx.beginPath();
+        const angle = radarAngle * Math.PI/180;
+        const x2 = w/2 + Math.cos(angle) * (w/2-8);
+        const y2 = h/2 + Math.sin(angle) * (h/2-8);
+        ctx.moveTo(w/2, h/2);
+        ctx.lineTo(x2, y2);
+        ctx.strokeStyle = '#00ffcc';
+        ctx.lineWidth = 2;
+        ctx.shadowColor = '#00ffcc';
+        ctx.shadowBlur = 10;
+        ctx.stroke();
+        ctx.shadowBlur = 0;
+        
+        radarAngle = (radarAngle + 0.8) % 360;
+        requestAnimationFrame(drawRadar);
+      }
+      radarCanvas.width = 180; radarCanvas.height = 180;
+      drawRadar();
+
+      // ----- CURSOR CIRCUIT TRAIL (canvas) -----
+      const cursorCanvas = document.getElementById('cursor-canvas');
+      const ctxCursor = cursorCanvas.getContext('2d');
+      let mouseX = 0, mouseY = 0;
+      let trail = [];
+      const MAX_TRAIL = 25;
+      
+      function resizeCursorCanvas() {
+        cursorCanvas.width = window.innerWidth;
+        cursorCanvas.height = window.innerHeight;
+      }
+      window.addEventListener('resize', resizeCursorCanvas);
+      resizeCursorCanvas();
+
+      document.addEventListener('mousemove', (e) => {
+        mouseX = e.clientX;
+        mouseY = e.clientY;
+        trail.push({ x: mouseX, y: mouseY, life: 1.0 });
+        if (trail.length > MAX_TRAIL) trail.shift();
+      });
+
+      function drawCursorTrail() {
+        ctxCursor.clearRect(0, 0, cursorCanvas.width, cursorCanvas.height);
+        
+        // draw circuit lines connecting trail points
+        if (trail.length > 1) {
+          ctxCursor.beginPath();
+          ctxCursor.strokeStyle = '#00ffcc';
+          ctxCursor.lineWidth = 2;
+          ctxCursor.shadowColor = '#00b3ff';
+          ctxCursor.shadowBlur = 12;
+          ctxCursor.globalAlpha = 0.5;
+          
+          for (let i = 0; i < trail.length - 1; i++) {
+            const p1 = trail[i];
+            const p2 = trail[i+1];
+            if (p1 && p2) {
+              ctxCursor.beginPath();
+              ctxCursor.moveTo(p1.x, p1.y);
+              ctxCursor.lineTo(p2.x, p2.y);
+              ctxCursor.strokeStyle = i % 2 === 0 ? '#00ffcc' : '#00b3ff';
+              ctxCursor.stroke();
+            }
+          }
+          
+          // draw small nodes
+          ctxCursor.shadowBlur = 8;
+          trail.forEach((p, idx) => {
+            ctxCursor.beginPath();
+            ctxCursor.arc(p.x, p.y, 3, 0, 2*Math.PI);
+            ctxCursor.fillStyle = idx === trail.length-1 ? '#ff3b3b' : '#00ffcc';
+            ctxCursor.shadowColor = idx === trail.length-1 ? '#ff3b3b' : '#00ffcc';
+            ctxCursor.fill();
+          });
+        }
+        ctxCursor.shadowBlur = 0;
+        ctxCursor.globalAlpha = 1;
+        requestAnimationFrame(drawCursorTrail);
+      }
+      drawCursorTrail();
+
+      // ----- HOLOGRAM PANEL LOGIC -----
+      const panel = document.getElementById('hologram-panel');
+      const panelTitle = document.getElementById('panel-title');
+      const panelContent = document.getElementById('panel-content');
+      const closeBtn = document.getElementById('close-panel');
+
+      function displaySection(sectionKey) {
+        const data = contentData[sectionKey];
+        if (!data) return;
+        panelTitle.innerText = sectionKey;
+        let html = '';
+        if (sectionKey === 'MISSION PROFILE') {
+          html = `<p><strong>${data.name}</strong><br>${data.designation}<br><span style="color:#00ffcc">${data.aspiration}</span></p><p>${data.mission_statement}</p>`;
+        } else if (sectionKey === 'SKILLS') {
+          html = '<span style="color:#00b3ff">CORE</span><ul>' + data.core_skills.map(s => `<li>◉ ${s}</li>`).join('') + '</ul><span style="color:#00ffcc">DEFENCE FOCUS</span><ul>' + data.defence_focus.map(s => `<li>⚡ ${s}</li>`).join('') + '</ul>';
+        } else if (sectionKey === 'PROJECTS') {
+          const p = data.project_1;
+          html = `<div style="border-left:3px solid #00b3ff; padding-left:15px;"><h3>${p.title}</h3><p>${p.description}</p><p><span style="color:#00ffcc">Tech:</span> ${p.technologies_used.join(' · ')}</p><p><span style="color:#ff3b3b">> </span>${p.future_scope}</p></div>`;
+        } else if (sectionKey === 'TARGET EXPERIENCE') {
+          html = `<p><span style="color:#00ffcc">PRIME TARGETS</span> ${data.goal_organizations.join(' · ')}</p><p>${data.career_objective}</p>`;
+        } else if (sectionKey === 'HOBBIES') {
+          html = '<ul>' + data.map(h => `<li>⚙️ ${h}</li>`).join('') + '</ul>';
+        } else if (sectionKey === 'CONTACT') {
+          html = `<div style="background:#11223380; padding:15px; border-radius:8px;">
+            <p>📡 ${data.email}</p>
+            <p>🔗 <a href="${data.github}" target="_blank" style="color:#00ffcc">${data.github}</a></p>
+            <p>🔗 <a href="${data.linkedin}" target="_blank" style="color:#00b3ff">${data.linkedin}</a></p>
+            <p style="color:#00b3ff">${data.contact_style}</p>
+          </div>`;
+        }
+        panelContent.innerHTML = html;
+        panel.classList.add('active');
+      }
+
+      closeBtn.addEventListener('click', () => {
+        panel.classList.remove('active');
+      });
+
+      // ----- FIRING SEQUENCE (GSAP + Three) -----
+      let isFiring = false;
+      function fireCannon(section) {
+        if (isFiring) return;
+        isFiring = true;
+
+        // hide any open panel
+        panel.classList.remove('active');
+
+        // Shockwave
+        const shock = document.getElementById('shockwave');
+        shock.style.setProperty('--x', (mouseX / window.innerWidth * 100) + '%');
+        shock.style.setProperty('--y', (mouseY / window.innerHeight * 100) + '%');
+        gsap.to(shock, { opacity: 0.8, duration: 0.1, yoyo: true, repeat: 1, onComplete: () => { shock.style.opacity = 0; } });
+
+        // Rotate barrel toward screen (upwards)
+        gsap.to(cannonParts.barrelGroup.rotation, { x: -0.7, duration: 0.3, ease: "power2.out" });
+        
+        // Charging glow (increase light intensity)
+        gsap.to(pointLight1, { intensity: 2.5, duration: 0.2, yoyo: true, repeat: 1 });
+        gsap.to(pointLight2, { intensity: 2.0, duration: 0.2, yoyo: true, repeat: 1 });
+        
+        // Muzzle flash: create projectile
+        const projectileGeo = new THREE.SphereGeometry(0.3, 8);
+        const projectileMat = new THREE.MeshStandardMaterial({ color: 0xffaa33, emissive: 0xff5500 });
+        const projectile = new THREE.Mesh(projectileGeo, projectileMat);
+        
+        // position at muzzle world position
+        const muzzleWorldPos = new THREE.Vector3();
+        cannonParts.muzzle.getWorldPosition(muzzleWorldPos);
+        projectile.position.copy(muzzleWorldPos);
+        scene.add(projectile);
+        
+        // recoil effect on group
+        gsap.to(cannonGroup.position, { z: 0.2, duration: 0.1, yoyo: true, repeat: 1 });
+        
+        // animate projectile forward
+        gsap.to(projectile.position, {
+          z: muzzleWorldPos.z + 10,
+          x: muzzleWorldPos.x + (Math.random()-0.5)*2,
+          y: muzzleWorldPos.y + 2,
+          duration: 0.6,
+          ease: "power1.in",
+          onUpdate: function() {
+            // add glow
+            projectile.scale.setScalar(1 + Math.sin(Date.now()*0.02)*0.1);
+          },
+          onComplete: () => {
+            scene.remove(projectile);
+            // small explosion particles
+            for (let i=0; i<12; i++) {
+              const p = new THREE.Mesh(new THREE.SphereGeometry(0.1,4), new THREE.MeshStandardMaterial({color: 0xffaa33, emissive:0xff3300}));
+              p.position.copy(projectile.position);
+              scene.add(p);
+              gsap.to(p.position, { x: p.position.x + (Math.random()-0.5)*3, y: p.position.y + (Math.random()-0.5)*3, z: p.position.z + (Math.random()-0.5)*3, duration: 0.5, ease: "power2.out", onComplete: () => scene.remove(p) });
+            }
+            // after explosion, show content panel
+            displaySection(section);
+            
+            // reset barrel
+            gsap.to(cannonParts.barrelGroup.rotation, { x: 0, duration: 0.4, delay: 0.2 });
+            isFiring = false;
+          }
+        });
+      }
+
+      // attach event listeners to buttons
+      document.querySelectorAll('.mil-button').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+          const section = e.target.getAttribute('data-section');
+          fireCannon(section);
+        });
+      });
+
+      // window resize handling for three
+      window.addEventListener('resize', () => {
+        camera.aspect = window.innerWidth / window.innerHeight;
+        camera.updateProjectionMatrix();
+        renderer.setSize(window.innerWidth, window.innerHeight);
+      });
+
+      // simple cursor hide/show when leaving window
+      document.body.style.cursor = 'none';
+    })();
+  </script>
+</body>
+</html>
