@@ -1,0 +1,575 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>HUD portfolio · Siddarthan R · DEFENCE AI</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+      user-select: none;
+    }
+
+    body {
+      background: #0A0F1E;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-family: 'Segoe UI', 'Roboto Mono', 'Courier New', monospace;
+      overflow: hidden;
+    }
+
+    /* cockpit overlay — main container */
+    .cockpit {
+      position: relative;
+      width: 1360px;
+      max-width: 98vw;
+      height: 850px;
+      max-height: 98vh;
+      background: radial-gradient(circle at 50% 30%, #13203a, #04060c);
+      border: 3px solid #1AFF00;
+      border-radius: 60px 60px 30px 30px;
+      box-shadow: 0 0 30px #00f5ff80, inset 0 0 30px #0A0F1E;
+      overflow: hidden;
+    }
+
+    /* HUD corners & static elements */
+    .hud-corner {
+      position: absolute;
+      width: 140px;
+      height: 140px;
+      border-style: solid;
+      border-color: #1AFF00;
+      border-width: 0;
+      pointer-events: none;
+      z-index: 20;
+      filter: drop-shadow(0 0 8px #1AFF00);
+    }
+    .corner-tl { top: 20px; left: 20px; border-top-width: 4px; border-left-width: 4px; border-radius: 30px 0 0 0; }
+    .corner-tr { top: 20px; right: 20px; border-top-width: 4px; border-right-width: 4px; border-radius: 0 30px 0 0; }
+    .corner-bl { bottom: 20px; left: 20px; border-bottom-width: 4px; border-left-width: 4px; border-radius: 0 0 0 30px; }
+    .corner-br { bottom: 20px; right: 20px; border-bottom-width: 4px; border-right-width: 4px; border-radius: 0 0 30px 0; }
+
+    /* heading stealth tag */
+    .callsign {
+      position: absolute;
+      top: 30px; left: 50%;
+      transform: translateX(-50%);
+      color: #00F5FF;
+      font-family: 'Courier New', monospace;
+      font-size: 1.1rem;
+      letter-spacing: 8px;
+      text-shadow: 0 0 15px #00F5FF;
+      border: 1px solid #00F5FF;
+      background: #0A0F1E80;
+      padding: 8px 30px;
+      border-radius: 40px;
+      z-index: 25;
+      backdrop-filter: blur(4px);
+      white-space: nowrap;
+    }
+
+    /* main sky canvas where action happens */
+    .dogfight-sky {
+      position: relative;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+    }
+
+    /* enemy aircraft grid (targets) */
+    .targets-layer {
+      position: absolute;
+      width: 100%;
+      height: 100%;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-evenly;
+      padding: 100px 40px 120px 40px;
+      gap: 5px;
+      z-index: 5;
+    }
+
+    .target-row {
+      display: flex;
+      justify-content: space-around;
+      align-items: center;
+    }
+
+    .enemy {
+      width: 100px;
+      height: 40px;
+      background: transparent;
+      color: #FF3B3B;
+      font-size: 0.85rem;
+      font-weight: 700;
+      text-align: center;
+      line-height: 38px;
+      border: 2px solid #FF3B3B;
+      border-radius: 60% 60% 30% 30% / 100% 100% 30% 30%;
+      box-shadow: 0 0 15px #FF3B3B, inset 0 0 5px #FF3B3B;
+      text-transform: uppercase;
+      letter-spacing: 2px;
+      font-family: 'Courier New', monospace;
+      transform: skewX(-5deg) perspective(300px) rotateY(5deg);
+      transition: 0.2s;
+      cursor: crosshair;
+      position: relative;
+      backdrop-filter: blur(2px);
+    }
+
+    .enemy::before {
+      content: "⚡";
+      position: absolute;
+      left: -20px;
+      top: 5px;
+      font-size: 22px;
+      color: #FF3B3B;
+      filter: drop-shadow(0 0 8px red);
+      opacity: 0.7;
+    }
+    .enemy::after {
+      content: "🛸";
+      position: absolute;
+      right: -22px;
+      top: 5px;
+      font-size: 22px;
+      opacity: 0.5;
+      filter: drop-shadow(0 0 4px cyan);
+    }
+
+    /* LOCK-ON effect (trigger animation) */
+    .enemy.locked {
+      border-color: #1AFF00;
+      box-shadow: 0 0 0 4px #1AFF00, 0 0 0 8px #1aff0060;
+      color: #1AFF00;
+      transform: scale(1.08) skewX(-5deg) perspective(300px) rotateY(5deg);
+      transition: 0.1s;
+    }
+    .enemy.locked::before {
+      content: "🔒";
+      color: #1AFF00;
+    }
+
+    /* Holographic information panel */
+    .hologram-panel {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      width: 550px;
+      max-width: 80vw;
+      background: #111827E0;
+      backdrop-filter: blur(12px);
+      border: 3px solid #00F5FF;
+      border-radius: 24px;
+      padding: 30px 28px;
+      color: #ccf0ff;
+      box-shadow: 0 0 70px #00F5FF, inset 0 0 20px #1aff0080;
+      z-index: 200;
+      font-family: 'Segoe UI', 'Roboto Mono', monospace;
+      display: none;
+      flex-direction: column;
+      transition: display 0.2s;
+      pointer-events: none;
+    }
+
+    .hologram-panel.active {
+      display: flex;
+      animation: hologlitch 0.3s ease, floatPulse 2s infinite;
+    }
+
+    @keyframes hologlitch {
+      0% { opacity: 0; transform: translate(-50%, -40%) scale(0.8); filter: blur(8px); }
+      50% { opacity: 1; transform: translate(-50%, -52%) scale(1.02); filter: blur(0); }
+      100% { transform: translate(-50%, -50%) scale(1); }
+    }
+
+    @keyframes floatPulse {
+      0% { border-color: #00F5FF; box-shadow: 0 0 40px #00F5FF; }
+      50% { border-color: #1AFF00; box-shadow: 0 0 60px #1AFF00; }
+      100% { border-color: #00F5FF; box-shadow: 0 0 40px #00F5FF; }
+    }
+
+    .panel-title {
+      font-size: 1.8rem;
+      font-weight: 600;
+      color: #00F5FF;
+      text-shadow: 0 0 15px cyan;
+      border-bottom: 2px solid #1AFF00;
+      padding-bottom: 12px;
+      margin-bottom: 20px;
+      letter-spacing: 2px;
+      font-family: 'Courier New', monospace;
+    }
+
+    .panel-content {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 20px;
+      font-size: 1.1rem;
+    }
+
+    .data-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 15px;
+      width: 100%;
+    }
+
+    .data-item {
+      background: #0A0F1E80;
+      border-left: 6px solid #FF3B3B;
+      padding: 12px 16px;
+      border-radius: 12px;
+      font-family: 'Courier New', monospace;
+      box-shadow: 0 0 10px #1aff0060;
+    }
+
+    .badge {
+      color: #1AFF00;
+      font-size: 0.9rem;
+      text-transform: uppercase;
+      display: block;
+      font-weight: 300;
+    }
+
+    .closing-beam {
+      position: absolute;
+      bottom: 0;
+      left: 0;
+      width: 100%;
+      height: 0;
+      background: linear-gradient(180deg, transparent, #FF9933 30%, #FFFFFF 50%, #138808 80%);
+      z-index: 300;
+      transition: height 1.5s ease;
+      pointer-events: none;
+      mix-blend-mode: screen;
+      opacity: 0.8;
+    }
+
+    .closing-beam.active {
+      height: 100%;
+    }
+
+    .final-message {
+      position: absolute;
+      bottom: 100px;
+      left: 50%;
+      transform: translateX(-50%);
+      color: white;
+      font-size: 2.5rem;
+      font-weight: 800;
+      text-shadow: 0 0 40px #1AFF00, 0 0 80px #FF3B3B;
+      z-index: 400;
+      background: #0A0F1E80;
+      backdrop-filter: blur(20px);
+      border: 3px solid white;
+      padding: 25px 50px;
+      border-radius: 70px;
+      display: none;
+      white-space: nowrap;
+      letter-spacing: 10px;
+    }
+
+    .final-message.show {
+      display: block;
+      animation: flicker 2s infinite;
+    }
+
+    @keyframes flicker {
+      0% { opacity: 1; }
+      50% { opacity: 0.7; text-shadow: 0 0 100px #1AFF00; }
+    }
+
+    .cta-button {
+      position: absolute;
+      bottom: 35px;
+      right: 50px;
+      background: transparent;
+      border: 3px solid #1AFF00;
+      color: #1AFF00;
+      font-size: 1.6rem;
+      padding: 12px 36px;
+      border-radius: 60px;
+      font-weight: 800;
+      backdrop-filter: blur(6px);
+      cursor: pointer;
+      z-index: 350;
+      box-shadow: 0 0 30px #1AFF00;
+      transition: 0.2s;
+      font-family: 'Courier New', monospace;
+    }
+
+    .cta-button:hover {
+      background: #1AFF00;
+      color: #0A0F1E;
+      box-shadow: 0 0 80px #1AFF00;
+    }
+
+    .radar-tip {
+      position: absolute;
+      top: 120px; right: 70px;
+      color: #1AFF00;
+      font-size: 0.8rem;
+      border: 1px dashed #1AFF00;
+      padding: 8px;
+      border-radius: 50%;
+      animation: spin 8s infinite linear;
+    }
+
+    /* profile name always top */
+    .profile-mini {
+      position: absolute;
+      bottom: 25px; left: 35px;
+      color: #ccc;
+      font-family: 'Courier New';
+      border-left: 4px solid #00F5FF;
+      padding-left: 18px;
+      z-index: 30;
+    }
+  </style>
+</head>
+<body>
+<div class="cockpit">
+  <div class="callsign">🇮🇳 SIDDARTHAN R · ECE · DRDO ASPIRANT</div>
+  <div class="hud-corner corner-tl"></div>
+  <div class="hud-corner corner-tr"></div>
+  <div class="hud-corner corner-bl"></div>
+  <div class="hud-corner corner-br"></div>
+  <div class="profile-mini">
+    <span style="color:#1AFF00">EMBEDDED SYSTEMS</span> • <span style="color:#00F5FF">AI DEFENCE</span>
+  </div>
+
+  <!-- main sky with targets -->
+  <div class="dogfight-sky" id="dogfightSky">
+    <div class="targets-layer" id="targetsLayer">
+      <!-- will be injected with JS -->
+    </div>
+  </div>
+
+  <!-- hologram panel (dynamic) -->
+  <div class="hologram-panel" id="hologramPanel">
+    <div class="panel-title" id="panelTitle">MISSION: IDENTITY</div>
+    <div class="panel-content" id="panelContent">Loading...</div>
+  </div>
+
+  <!-- closing elements (tricolor beam + final text) -->
+  <div class="closing-beam" id="tricolorBeam"></div>
+  <div class="final-message" id="finalMessage">MISSION READY: Siddarthan R | Future Defence Technologist</div>
+  <button class="cta-button" id="recruitBtn">⏎ INITIATE RECRUITMENT</button>
+</div>
+
+<script>
+  (function() {
+    // ---------- TARGET DATA (exactly from profile) ----------
+    const targetsData = [
+      {
+        name: "MISSION: IDENTITY",
+        content: {
+          summary: "Passionate Electronics and Communication Engineering student driven to build intelligent defence systems. Focused on real-time embedded AI solutions for national security applications.",
+          career_objective: "To contribute to advanced defence research organizations like DRDO by developing AI-powered embedded systems for battlefield intelligence and electronic warfare."
+        }
+      },
+      {
+        name: "MISSION: TECHNICAL SKILLS",
+        content: {
+          embedded_systems: ["Microcontrollers (ARM, AVR basics)","Embedded C Programming","RTOS Fundamentals","Sensor Interfacing"],
+          ai_and_signal: ["AI Model Basics","Signal Monitoring Concepts","Anti-Jamming Detection Logic","Data Processing Fundamentals"],
+          tools: ["VS Code","Proteus Simulation","Arduino IDE","MATLAB Basics"]
+        }
+      },
+      {
+        name: "MISSION: PROJECT PROTOTYPE",
+        content: {
+          project_title: "AI-Based Anti-Jamming Detection Prototype",
+          description: "Designed a conceptual prototype system capable of detecting signal interference patterns and identifying potential jamming attempts using embedded processing logic.",
+          core_features: ["Real-time signal strength monitoring","Interference pattern detection","Alert trigger mechanism","Scalable for military communication systems"],
+          future_scope: "Integration with SDR modules and deployment in tactical communication networks."
+        }
+      },
+      {
+        name: "MISSION: RESEARCH & DEFENCE INTEREST",
+        content: {
+          areas_of_interest: ["Electronic Warfare Systems","Radar Signal Intelligence","Defence Communication Security","AI-Powered Surveillance Systems"],
+          vision_statement: "To engineer systems that enhance India's strategic defence capabilities through intelligent embedded technology."
+        }
+      },
+      {
+        name: "MISSION: PERSONAL ATTRIBUTES",
+        content: {
+          traits: ["Disciplined","Strategic Thinker","Fast Learner","Mission-Oriented","High Adaptability"],
+          hobbies: ["Defence Technology Research","AI Framework Exploration","Embedded System Experimentation","Physical Fitness Training"]
+        }
+      }
+    ];
+
+    // ---------- render enemy targets ----------
+    const layer = document.getElementById('targetsLayer');
+    function buildTargets() {
+      let html = '';
+      // we create two rows: first three, next two (makes 5)
+      const row1 = targetsData.slice(0,3);
+      const row2 = targetsData.slice(3,5);
+      html += '<div class="target-row">';
+      row1.forEach((t, idx) => {
+        html += `<div class="enemy" data-index="${idx}" data-mission="${t.name}">${t.name.replace('MISSION:', '').trim()}</div>`;
+      });
+      html += '</div><div class="target-row">';
+      row2.forEach((t, idx) => {
+        html += `<div class="enemy" data-index="${idx+3}" data-mission="${t.name}">${t.name.replace('MISSION:', '').trim()}</div>`;
+      });
+      html += '</div>';
+      layer.innerHTML = html;
+    }
+    buildTargets();
+
+    const enemies = document.querySelectorAll('.enemy');
+    const panel = document.getElementById('hologramPanel');
+    const panelTitle = document.getElementById('panelTitle');
+    const panelContent = document.getElementById('panelContent');
+    const beam = document.getElementById('tricolorBeam');
+    const finalMsg = document.getElementById('finalMessage');
+
+    let currentIndex = 0;
+    let timeoutId = null;
+    let isDestroyed = [false, false, false, false, false];
+
+    // function to format content based on target index
+    function formatContent(index) {
+      const t = targetsData[index];
+      if (!t) return 'corrupted transmission';
+      if (index === 0) {
+        return `<div class="data-grid">
+          <div class="data-item"><span class="badge">summary</span> ${t.content.summary}</div>
+          <div class="data-item"><span class="badge">objective</span> ${t.content.career_objective}</div>
+        </div>`;
+      } else if (index === 1) {
+        return `<div class="data-grid">
+          <div class="data-item"><span class="badge">embedded</span> ${t.content.embedded_systems.join(' • ')}</div>
+          <div class="data-item"><span class="badge">AI / signal</span> ${t.content.ai_and_signal.join(' • ')}</div>
+          <div class="data-item"><span class="badge">tools</span> ${t.content.tools.join(' • ')}</div>
+        </div>`;
+      } else if (index === 2) {
+        return `<div><div class="data-item"><span class="badge">${t.content.project_title}</span> ${t.content.description}</div>
+        <div class="data-item"><span class="badge">features</span> ${t.content.core_features.join(' • ')}</div>
+        <div class="data-item"><span class="badge">future</span> ${t.content.future_scope}</div></div>`;
+      } else if (index === 3) {
+        return `<div class="data-item"><span class="badge">focus areas</span> ${t.content.areas_of_interest.join(' • ')}</div>
+        <div class="data-item"><span class="badge">vision</span> ${t.content.vision_statement}</div>`;
+      } else if (index === 4) {
+        return `<div class="data-item"><span class="badge">traits</span> ${t.content.traits.join(' ⚡ ')}</div>
+        <div class="data-item"><span class="badge">hobbies</span> ${t.content.hobbies.join(' • ')}</div>`;
+      }
+      return 'secure channel open';
+    }
+
+    // function to trigger lock-on and explosion sequence for a given enemy element
+    function engageTarget(enemy, idx) {
+      if (isDestroyed[idx]) return; // already shot down
+      // clear any pending timers
+      if (timeoutId) clearTimeout(timeoutId);
+
+      // remove lock from all
+      enemies.forEach(e => e.classList.remove('locked'));
+
+      // lock this target
+      enemy.classList.add('locked');
+
+      // after short lock, "fire" and show hologram
+      timeoutId = setTimeout(() => {
+        if (!enemy) return;
+        // explosion: remove enemy (hide) but we need to mark destroyed, hide it
+        enemy.style.opacity = '0.2';
+        enemy.style.transition = '0.2s';
+        enemy.style.pointerEvents = 'none';
+        isDestroyed[idx] = true;
+
+        // show hologram panel
+        panelTitle.innerText = targetsData[idx].name;
+        panelContent.innerHTML = formatContent(idx);
+        panel.classList.add('active');
+
+        // disappear panel after 10 seconds, then try next target automatically
+        timeoutId = setTimeout(() => {
+          panel.classList.remove('active');
+          // find next undestroyed target
+          let nextIdx = -1;
+          for (let i = 0; i < isDestroyed.length; i++) {
+            if (!isDestroyed[i]) { nextIdx = i; break; }
+          }
+          if (nextIdx !== -1) {
+            // auto lock onto next target
+            const nextEnemy = document.querySelector(`.enemy[data-index="${nextIdx}"]`);
+            if (nextEnemy) engageTarget(nextEnemy, nextIdx);
+          } else {
+            // ALL TARGETS DESTROYED → closing scene: tricolor beam and final message
+            beam.classList.add('active');
+            setTimeout(() => {
+              finalMsg.classList.add('show');
+            }, 800);
+          }
+        }, 10000); // 10 sec display
+
+      }, 600); // lock duration
+    }
+
+    // attach click event to each enemy
+    enemies.forEach(enemy => {
+      enemy.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const idx = parseInt(enemy.getAttribute('data-index'), 10);
+        if (!isDestroyed[idx]) {
+          // if any timer running, clear (new target selected)
+          if (timeoutId) clearTimeout(timeoutId);
+          panel.classList.remove('active'); // hide current panel
+          engageTarget(enemy, idx);
+        }
+      });
+    });
+
+    // optional: simulate radar auto-lock first target after short welcome
+    window.addEventListener('load', () => {
+      // auto start with first target after 1.5 sec
+      setTimeout(() => {
+        if (!isDestroyed[0]) {
+          const first = document.querySelector(`.enemy[data-index="0"]`);
+          if (first) engageTarget(first, 0);
+        }
+      }, 1500);
+    });
+
+    // recruitment button: force all destroyed? reset game?
+    document.getElementById('recruitBtn').addEventListener('click', () => {
+      // Reset everything: clear panel, beam, final message, restore enemies
+      panel.classList.remove('active');
+      beam.classList.remove('active');
+      finalMsg.classList.remove('show');
+      isDestroyed = [false, false, false, false, false];
+      enemies.forEach(e => {
+        e.style.opacity = '1';
+        e.style.pointerEvents = 'auto';
+        e.classList.remove('locked');
+      });
+      if (timeoutId) clearTimeout(timeoutId);
+      // restart from first
+      setTimeout(() => {
+        const first = document.querySelector(`.enemy[data-index="0"]`);
+        if (first) engageTarget(first, 0);
+      }, 500);
+    });
+
+    // extra design: HUD lines moving (just ambiance)
+    setInterval(() => {
+      const randomEnemy = Math.floor(Math.random() * enemies.length);
+      // only visual flair: lock flash then remove
+    }, 4000);
+  })();
+</script>
+<!-- additional HUD scanner line -->
+<div style="position: fixed; top: 0; left: 0; width: 100%; height: 4px; background: #1AFF00; box-shadow: 0 0 30px cyan; opacity: 0.1; pointer-events: none; z-index: 999;"></div>
+</body>
+</html>

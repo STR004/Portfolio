@@ -1,0 +1,613 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
+  <title>Siddarthan R · DRDO command interface</title>
+  <style>
+    /* ==================== RESET & FONTS ==================== */
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: 'Rajdhani', 'Segoe UI', 'Arial', sans-serif;
+      background-color: #0b0e0c;        /* matte black base */
+      color: #cfecd0;
+      height: 100vh;
+      width: 100vw;
+      overflow: hidden;
+      position: relative;
+      user-select: none;                 /* tactical feel, no accidental highlight */
+    }
+
+    /* fallback font if Rajdhani is not available */
+    @import url('https://fonts.googleapis.com/css2?family=Rajdhani:wght@400;500;600;700&display=swap');
+
+    /* ==================== TACTICAL BACKGROUND LAYERS ==================== */
+    .grid-overlay {
+      position: fixed;
+      top: 0; left: 0; width: 100%; height: 100%;
+      background-image: 
+        linear-gradient(rgba(30, 70, 30, 0.08) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(30, 70, 30, 0.08) 1px, transparent 1px);
+      background-size: 50px 50px;        /* subtle grid, like defence map */
+      pointer-events: none;
+      z-index: 2;
+    }
+
+    /* radar scanning animation (very low opacity, moves diagonally) */
+    .radar-scan {
+      position: fixed;
+      top: -50%; left: -50%; width: 200%; height: 200%;
+      background: radial-gradient(circle at 30% 30%, rgba(0, 180, 0, 0.03), transparent 60%);
+      animation: rotateScan 40s linear infinite;
+      pointer-events: none;
+      z-index: 1;
+      opacity: 0.4;
+    }
+
+    @keyframes rotateScan {
+      0% { transform: rotate(0deg) scale(1); }
+      100% { transform: rotate(360deg) scale(1.2); }
+    }
+
+    /* extra steel texture via pseudo-element */
+    body::after {
+      content: '';
+      position: fixed;
+      top: 0; left: 0; width: 100%; height: 100%;
+      background: repeating-linear-gradient(45deg, rgba(80, 80, 80, 0.02) 0px, rgba(80, 80, 80, 0.02) 2px, transparent 2px, transparent 6px);
+      pointer-events: none;
+      z-index: 3;
+    }
+
+    /* ==================== CURSOR RIPPLE (circuit pulse) ==================== */
+    #cursor-ripple {
+      position: fixed;
+      width: 28px;
+      height: 28px;
+      border-radius: 50%;
+      background: radial-gradient(circle, rgba(0, 255, 0, 0.3) 0%, transparent 70%);
+      box-shadow: 0 0 15px #00aa40, 0 0 40px #1a5a1a;
+      transform: translate(-50%, -50%) scale(1);
+      pointer-events: none;
+      z-index: 9999;
+      mix-blend-mode: screen;
+      transition: width 0.2s, height 0.2s, background 0.2s;
+      animation: cursorPulse 3s infinite ease-in-out;
+    }
+
+    @keyframes cursorPulse {
+      0% { opacity: 0.5; transform: translate(-50%, -50%) scale(1); }
+      50% { opacity: 0.9; transform: translate(-50%, -50%) scale(1.4); }
+      100% { opacity: 0.5; transform: translate(-50%, -50%) scale(1); }
+    }
+
+    /* ==================== MAIN COMMAND LAYOUT ==================== */
+    .command-center {
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+      width: 100vw;
+      padding: 16px 24px 20px 24px;
+      position: relative;
+      z-index: 10;
+    }
+
+    /* top bar: code name / id */
+    .id-bar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 8px 16px;
+      background: rgba(20, 25, 20, 0.7);
+      border: 1px solid #2f6f2f;
+      border-radius: 4px;
+      margin-bottom: 12px;
+      backdrop-filter: blur(2px);
+      box-shadow: 0 0 8px rgba(0, 70, 0, 0.5);
+      font-weight: 500;
+      letter-spacing: 1.5px;
+    }
+    .id-bar .call-sign {
+      color: #acf7ac;
+      text-shadow: 0 0 5px #1f9f1f;
+    }
+    .id-bar .rank {
+      color: #b8c9b8;
+      font-size: 0.9rem;
+    }
+
+    /* ==================== CENTRAL CONSOLE ==================== */
+    .console-panel {
+      flex: 1;
+      min-height: 0;                    /* flex overflow control */
+      background: #151b17;              /* steel grey / matte dark green */
+      border: 2px solid #2d5a2d;
+      border-radius: 16px;
+      box-shadow: inset 0 0 30px rgba(0, 20, 0, 0.9), 0 0 30px rgba(0, 100, 0, 0.4);
+      margin-bottom: 20px;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      backdrop-filter: blur(1px);
+      position: relative;
+    }
+
+    /* console header with missile-control style indicators */
+    .console-header {
+      display: flex;
+      align-items: center;
+      padding: 8px 20px;
+      background: #0d130f;
+      border-bottom: 2px solid #2d5a2d;
+      gap: 24px;
+    }
+    .target-indicator {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .led {
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      background: #1f8f1f;
+      box-shadow: 0 0 8px #00d500;
+      animation: blink 2s step-end infinite;
+    }
+    .led.red {
+      background: #6f2a2a;
+      box-shadow: 0 0 6px #a00;
+      animation: none;
+    }
+    @keyframes blink {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.3; }
+    }
+    .scope-id {
+      font-size: 1.1rem;
+      font-weight: 600;
+      color: #a5f7a5;
+      letter-spacing: 2px;
+    }
+    .radar-icon {
+      width: 40px;
+      height: 40px;
+      border: 2px solid #2f8f2f;
+      border-radius: 50%;
+      position: relative;
+      margin-left: auto;
+    }
+    .radar-icon::after {
+      content: '';
+      position: absolute;
+      top: 50%; left: 50%;
+      width: 4px; height: 4px;
+      background: #2f8f2f;
+      border-radius: 50%;
+      box-shadow: 0 0 12px #2f8f2f;
+    }
+    .radar-icon::before {
+      content: '';
+      position: absolute;
+      top: 2px; left: 50%;
+      width: 2px; height: 18px;
+      background: #2f8f2f;
+      transform-origin: bottom;
+      transform: rotate(45deg);
+      animation: sweep 6s linear infinite;
+    }
+    @keyframes sweep {
+      from { transform: rotate(0deg); }
+      to { transform: rotate(360deg); }
+    }
+
+    /* main display area where section content appears */
+    .display-screen {
+      flex: 1;
+      padding: 24px 28px;
+      overflow-y: auto;
+      background: rgba(10, 16, 12, 0.7);
+      background-image: linear-gradient(rgba(30, 80, 30, 0.1) 1px, transparent 1px),
+                        linear-gradient(90deg, rgba(30, 80, 30, 0.1) 1px, transparent 1px);
+      background-size: 20px 20px;
+      position: relative;
+      scrollbar-width: thin;
+      scrollbar-color: #2f8f2f #1a2a1a;
+    }
+    .display-screen::-webkit-scrollbar {
+      width: 6px;
+    }
+    .display-screen::-webkit-scrollbar-track {
+      background: #1a2a1a;
+    }
+    .display-screen::-webkit-scrollbar-thumb {
+      background: #2f8f2f;
+      border-radius: 8px;
+    }
+
+    /* scan overlay for digital transition */
+    .scan-overlay {
+      position: absolute;
+      top: 0; left: 0;
+      width: 100%; height: 100%;
+      background: linear-gradient(180deg, transparent, #00aa4060, transparent);
+      transform: translateY(-100%);
+      pointer-events: none;
+      z-index: 50;
+      opacity: 0.8;
+    }
+    .scan-overlay.active {
+      animation: scanDown 0.45s cubic-bezier(0.23, 1, 0.32, 1) forwards;
+    }
+    @keyframes scanDown {
+      0% { transform: translateY(-100%); }
+      50% { transform: translateY(0%); }
+      100% { transform: translateY(100%); }
+    }
+
+    /* ==================== BOTTOM TACTICAL BUTTONS ==================== */
+    .mission-buttons {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
+      gap: 12px 20px;
+      padding: 12px 8px;
+      background: rgba(10, 20, 10, 0.6);
+      border: 1px solid #2d5a2d;
+      border-radius: 60px;
+      backdrop-filter: blur(4px);
+      box-shadow: 0 0 20px rgba(0, 30, 0, 0.7);
+    }
+    .tac-btn {
+      background: transparent;
+      border: 1.5px solid #3c743c;
+      color: #c6f0c6;
+      font-family: 'Rajdhani', sans-serif;
+      font-weight: 600;
+      font-size: 1.1rem;
+      padding: 12px 22px;
+      border-radius: 40px;
+      letter-spacing: 1.8px;
+      text-transform: uppercase;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      box-shadow: 0 0 5px transparent;
+      background: rgba(20, 30, 20, 0.7);
+      backdrop-filter: blur(2px);
+      min-width: 150px;
+    }
+    .tac-btn:hover {
+      background: #253b25;
+      border-color: #5bb75b;
+      box-shadow: 0 0 15px #3f9f3f;
+      text-shadow: 0 0 8px #adffad;
+      transform: scale(1.02);
+    }
+    .tac-btn:active {
+      transform: scale(0.98);
+      box-shadow: 0 0 30px #00cc00;
+    }
+    /* launch effect (added via js on click) */
+    .tac-btn.launch {
+      animation: launchPulse 0.25s 2;
+    }
+    @keyframes launchPulse {
+      0% { box-shadow: 0 0 5px #00cc00; }
+      50% { box-shadow: 0 0 30px #00ff00, 0 0 60px #007700; background: #2d552d; }
+      100% { box-shadow: 0 0 5px #00cc00; }
+    }
+
+    /* ==================== SECTION CONTENT STYLES ==================== */
+    .section-title {
+      font-size: 1.9rem;
+      font-weight: 600;
+      color: #b7f7b7;
+      border-bottom: 2px solid #2d6f2d;
+      margin-bottom: 25px;
+      padding-bottom: 8px;
+      text-shadow: 0 0 6px #1f7f1f;
+      letter-spacing: 2px;
+    }
+    .skill-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+      gap: 18px;
+    }
+    .skill-card {
+      background: #1f2a1f;
+      border: 1px solid #2f7f2f;
+      padding: 16px 14px;
+      border-radius: 12px;
+      box-shadow: inset 0 0 15px #0f1f0f;
+    }
+    .skill-card h3 {
+      color: #b0fcb0;
+      font-size: 1.3rem;
+      margin-bottom: 8px;
+    }
+    .skill-card p {
+      color: #b0c0b0;
+      font-size: 0.95rem;
+      line-height: 1.5;
+    }
+    .project-detail {
+      background: #1b261b;
+      padding: 20px;
+      border-left: 6px solid #2f9f2f;
+      border-radius: 12px;
+      margin-top: 15px;
+    }
+    .project-detail h4 {
+      color: #c6ffc6;
+      margin: 15px 0 5px;
+    }
+    .project-detail ul, .course-list {
+      list-style: none;
+      padding-left: 8px;
+    }
+    .project-detail li, .course-list li {
+      margin: 6px 0;
+      padding-left: 24px;
+      background: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="%233fbf3f" stroke-width="2"><circle cx="12" cy="12" r="6"/></svg>') left center no-repeat;
+      background-size: 16px;
+    }
+    .contact-item {
+      font-size: 1.4rem;
+      background: #1e2a1e;
+      padding: 20px;
+      border-radius: 20px;
+      border: 1px solid #2f8f2f;
+      margin: 20px 0;
+    }
+    .contact-item a {
+      color: #adffad;
+      text-decoration: none;
+      border-bottom: 1px dashed #3f9f3f;
+    }
+    /* responsive */
+    @media (max-width: 800px) {
+      .command-center { padding: 12px; }
+      .tac-btn { font-size: 0.9rem; padding: 10px 14px; min-width: 120px; }
+      .display-screen { padding: 16px; }
+      .section-title { font-size: 1.6rem; }
+    }
+    @media (max-width: 500px) {
+      .mission-buttons { border-radius: 30px; }
+      .tac-btn { width: 100%; }
+    }
+  </style>
+</head>
+<body>
+  <!-- tactical background layers -->
+  <div class="grid-overlay"></div>
+  <div class="radar-scan"></div>
+
+  <!-- cursor ripple effect (embedded system pulse) -->
+  <div id="cursor-ripple"></div>
+
+  <main class="command-center">
+    <!-- top identification bar -->
+    <div class="id-bar">
+      <span class="call-sign">◈ SIDDARTHAN R ◈ DRDO ASPIRANT</span>
+      <span class="rank">ECE 3rd YEAR // SEC: EMBEDDED/AI</span>
+    </div>
+
+    <!-- central missile control console -->
+    <div class="console-panel">
+      <div class="console-header">
+        <div class="target-indicator">
+          <span class="led"></span>
+          <span class="led red"></span>
+          <span class="led"></span>
+        </div>
+        <span class="scope-id">TACTICAL CORE v2.3</span>
+        <div class="radar-icon"></div>
+      </div>
+
+      <!-- main dynamic display (section content) -->
+      <div id="display-content" class="display-screen">
+        <!-- default Mission Profile (set by JS) will be injected here -->
+      </div>
+
+      <!-- scan overlay for transition effect -->
+      <div id="scanOverlay" class="scan-overlay"></div>
+    </div>
+
+    <!-- bottom tactical button array -->
+    <div class="mission-buttons" id="missionButtons">
+      <button class="tac-btn" data-section="mission">Mission Profile</button>
+      <button class="tac-btn" data-section="arsenal">Technical Arsenal</button>
+      <button class="tac-btn" data-section="projects">Strategic Projects</button>
+      <button class="tac-btn" data-section="research">Research & Innovation</button>
+      <button class="tac-btn" data-section="education">Education Command</button>
+      <button class="tac-btn" data-section="contact">Contact Transmission</button>
+    </div>
+  </main>
+
+  <script>
+    (function() {
+      "use strict";
+
+      // ---------- CURSOR RIPPLE (circuit pulse) ----------
+      const cursor = document.getElementById('cursor-ripple');
+      if (cursor) {
+        document.addEventListener('mousemove', (e) => {
+          cursor.style.left = e.clientX + 'px';
+          cursor.style.top = e.clientY + 'px';
+        });
+        document.addEventListener('mouseleave', () => {
+          cursor.style.opacity = '0';
+        });
+        document.addEventListener('mouseenter', () => {
+          cursor.style.opacity = '1';
+        });
+      }
+
+      // ---------- SECTION DATA (professional, DRDO-aligned) ----------
+      const sections = {
+        mission: `
+          <div class="section-title">◈ MISSION PROFILE</div>
+          <div style="font-size:1.2rem; background: #1e2a1e; padding: 25px; border-radius: 24px; border-left: 8px solid #2f9f2f;">
+            <p style="margin-bottom: 20px;">Highly motivated 3rd-year ECE student with a strong passion for <strong>embedded systems</strong> and <strong>AI in defence applications</strong>. Aspiring to contribute as a DRDO scientist, with hands-on experience in developing AI-based anti-jamming detection prototypes. Expertise in microcontroller programming (ARM, STM32), RTOS, and signal processing. Committed to innovation in electronic warfare and secure communication systems for national defence.</p>
+            <p style="color:#b0fcb0;">◈ Clearance: Top Secret // Mission: DRDO Entry 2026</p>
+          </div>
+        `,
+        arsenal: `
+          <div class="section-title">◈ TECHNICAL ARSENAL</div>
+          <div class="skill-grid">
+            <div class="skill-card"><h3>ARM / STM32</h3><p>Bare-metal, HAL, low-level drivers</p></div>
+            <div class="skill-card"><h3>RTOS</h3><p>FreeRTOS, task scheduling, queues</p></div>
+            <div class="skill-card"><h3>Embedded C</h3><p>MISRA, memory optimization, registers</p></div>
+            <div class="skill-card"><h3>Comm Protocols</h3><p>SPI, I2C, UART, CAN</p></div>
+            <div class="skill-card"><h3>Signal Processing</h3><p>FFT, filters, real-time analysis</p></div>
+            <div class="skill-card"><h3>AI on edge</h3><p>TinyML, TensorFlow Lite, NPU integration</p></div>
+          </div>
+        `,
+        projects: `
+          <div class="section-title">◈ STRATEGIC PROJECTS</div>
+          <div class="project-detail">
+            <h2 style="color:#b0fcb0;">AI-Based Anti-Jamming Detection Prototype</h2>
+            <h4>◈ Problem Statement</h4>
+            <p>Military communication links (UAVs, soldiers) are vulnerable to RF jamming. Need real-time detection and classification.</p>
+            <h4>◈ System Architecture</h4>
+            <p>Dual-stage: analog front-end (AD9361) → FPGA preprocessing → ARM Cortex-M7 with embedded CNN.</p>
+            <h4>◈ Sensors & Hardware</h4>
+            <ul><li>AD9361 RF transceiver</li><li>Xilinx Artix-7 (optional)</li><li>STM32H743</li></ul>
+            <h4>◈ Algorithm Logic</h4>
+            <p>Spectrum sensing + statistical anomaly detection (CUSUM) → lightweight 1D-CNN for jamming type (continuous, sweep, reactive).</p>
+            <h4>◈ Defence Relevance</h4>
+            <p>Enables drones and tactical radios to evade jamming by switching frequencies/modulation. Directly applicable to DRDO’s electronic warfare systems.</p>
+          </div>
+        `,
+        research: `
+          <div class="section-title">◈ RESEARCH & INNOVATION</div>
+          <div style="display:grid; gap:20px;">
+            <div class="skill-card"><h3>⚡ Electronic Warfare</h3><p>Jamming countermeasures, spectrum dominance</p></div>
+            <div class="skill-card"><h3>🔐 Secure Communication</h3><p>Cryptographic implementations, anti-tamper</p></div>
+            <div class="skill-card"><h3>🤖 Autonomous Defence</h3><p>SWARM logic, obstacle avoidance</p></div>
+            <div class="skill-card"><h3>🧠 AI Threat Detection</h3><p>Anomaly detection on radar signatures</p></div>
+          </div>
+        `,
+        education: `
+          <div class="section-title">◈ EDUCATION COMMAND</div>
+          <div style="background:#1e2a1e; border-radius:24px; padding:24px;">
+            <p style="font-size:1.6rem;"><span class="led" style="display:inline-block; margin-right:15px;"></span> B.E. Electronics & Communication Engineering</p>
+            <p style="font-size:1.2rem; margin:10px 0 20px;">3rd Year · CGPA: 8.9/10 (till 5th sem)</p>
+            <div style="border-top:1px solid #2f7f2f; padding-top:20px;">
+              <h3 style="color:#b0fcb0;">◈ Relevant Coursework</h3>
+              <ul class="course-list" style="columns:2; column-gap:30px;">
+                <li>Embedded Systems</li><li>Digital Signal Processing</li>
+                <li>Communication Systems</li><li>Microprocessors</li>
+                <li>Control Systems</li><li>VLSI Design</li>
+                <li>Real-Time Operating Systems</li><li>Cryptography basics</li>
+              </ul>
+            </div>
+          </div>
+        `,
+        contact: `
+          <div class="section-title">◈ CONTACT TRANSMISSION</div>
+          <div class="contact-item">
+            📡 <strong>Email:</strong> <a href="mailto:siddarthansince2004@gmail.com">siddarthansince2004@gmail.com</a><br><br>
+            🔗 <strong>LinkedIn (placeholder):</strong> <a href="#">/in/siddarthan-r-defence</a><br><br>
+            <span style="color:#7fa07f;">◈ Secure channel // DRDO recruitment node</span>
+          </div>
+        `
+      };
+
+      // ---------- DOM elements ----------
+      const displayEl = document.getElementById('display-content');
+      const scanEl = document.getElementById('scanOverlay');
+      const buttons = document.querySelectorAll('.tac-btn');
+
+      // current section tracker
+      let currentSection = 'mission';
+      let scanTimer = null;
+      let isScanning = false;
+
+      // initial load
+      displayEl.innerHTML = sections.mission;
+
+      // ---------- scan transition + content update ----------
+      function switchSection(sectionId) {
+        if (sectionId === currentSection) return;        // avoid redundant updates
+        if (isScanning) {
+          // if already scanning, abort previous and force new
+          if (scanTimer) clearTimeout(scanTimer);
+          scanEl.classList.remove('active');
+          isScanning = false;
+        }
+
+        // trigger launch animation on all buttons? only clicked one gets class later, but we add to clicked outside
+        // but we need to know which button was clicked – we'll handle in click
+
+        // start scan transition
+        isScanning = true;
+        // force reflow to restart animation
+        void scanEl.offsetWidth;
+        scanEl.classList.add('active');
+
+        // after scan moves halfway (0.2s) we swap content, then let animation finish
+        scanTimer = setTimeout(() => {
+          // update content (new section)
+          displayEl.innerHTML = sections[sectionId];
+          currentSection = sectionId;
+
+          // remove overlay class after animation ends (approx 0.45s total)
+          setTimeout(() => {
+            scanEl.classList.remove('active');
+            isScanning = false;
+          }, 250); // finishes roughly when scan goes off screen
+        }, 200); // halfway through
+      }
+
+      // attach click handlers to tactical buttons
+      buttons.forEach(btn => {
+        btn.addEventListener('click', (e) => {
+          const section = btn.dataset.section;
+          if (!section) return;
+
+          // add launch effect to button
+          btn.classList.add('launch');
+          setTimeout(() => btn.classList.remove('launch'), 400);
+
+          // perform section switch
+          switchSection(section);
+        });
+      });
+
+      // ensure any leftover scan overlay removed if animation ends early
+      scanEl.addEventListener('animationend', () => {
+        // do nothing automatic, handled by timer, but safety
+        if (scanEl.classList.contains('active')) {
+          // but if animation ended without update, maybe? fallback
+        }
+      });
+
+      // set active mission button as default (first)
+      // (no highlight needed, but we can mark)
+
+      // disable cursor ripple on touch devices (optional)
+      if ('ontouchstart' in window) {
+        const cr = document.getElementById('cursor-ripple');
+        if (cr) cr.style.display = 'none';
+      }
+
+      // ---------- subtle radar scan effect already in css, no extra js needed
+
+      // preload mission profile (done)
+    })();
+  </script>
+  <!-- extra micro-fix for mobile viewport height -->
+  <style>
+    .command-center { height: 100vh; height: 100dvh; }
+    .tac-btn { font-family: 'Rajdhani', 'Segoe UI', monospace; }
+    .display-screen p, li { font-size: 1rem; line-height: 1.5; }
+    .project-detail li { margin-bottom: 8px; }
+  </style>
+</body>
+</html>

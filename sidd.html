@@ -1,0 +1,710 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Mission Portfolio • Siddarthan R</title>
+  <!-- Google Fonts & Font Awesome Icons -->
+  <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;600;800&family=Rajdhani:wght@300;500;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+      user-select: none;
+    }
+
+    body {
+      background-color: #0A192F;
+      font-family: 'Rajdhani', sans-serif;
+      height: 100vh;
+      overflow: hidden;
+      color: #00FFAA;
+      position: relative;
+    }
+
+    /* cockpit overlay effect (HUD frame) */
+    .cockpit {
+      position: relative;
+      width: 100vw;
+      height: 100vh;
+      background: radial-gradient(circle at 50% 30%, #1e3a5f 0%, #0a1420 90%);
+      box-shadow: inset 0 0 150px rgba(0,255,170,0.2);
+      border: 20px solid #1b2b40;
+      border-style: inset;
+      outline: 2px solid #00FFAA30;
+      outline-offset: -10px;
+      overflow: hidden;
+    }
+
+    /* clouds at sunset (ambient) */
+    .cloud-layer {
+      position: absolute;
+      top: 0; left: 0; width: 100%; height: 100%;
+      background: 
+        radial-gradient(circle at 20% 80%, rgba(255,140,0,0.2) 0%, transparent 30%),
+        radial-gradient(circle at 90% 40%, #ff5e4a20 0%, transparent 40%),
+        linear-gradient(180deg, #ff7b4a10 0%, #0A192F 90%);
+      pointer-events: none;
+      z-index: 1;
+    }
+
+    .cloud {
+      position: absolute;
+      background: rgba(255, 255, 255, 0.05);
+      backdrop-filter: blur(4px);
+      border-radius: 999px;
+      box-shadow: 0 20px 40px rgba(0,0,0,0.4);
+      filter: blur(12px);
+      width: 400px; height: 120px;
+      z-index: 2;
+    }
+    .cloud1 { top: 20%; left: 10%; width: 500px; height: 140px; background: rgba(255,180,100,0.08); }
+    .cloud2 { top: 60%; right: 5%; width: 600px; height: 180px; background: rgba(200,220,255,0.06); }
+    .cloud3 { bottom: 10%; left: 30%; width: 450px; height: 100px; background: rgba(255,120,80,0.1); }
+
+    /* ----- HUD TOP BAR (radar, missile, timer) ----- */
+    .hud-top {
+      position: absolute;
+      top: 30px; left: 30px; right: 30px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-family: 'Orbitron', sans-serif;
+      text-shadow: 0 0 10px #00FFAA, 0 0 20px #00FFAA;
+      z-index: 20;
+      pointer-events: none;
+    }
+
+    .radar-panel {
+      width: 180px;
+      height: 180px;
+      background: #0a1a2a;
+      border: 2px solid #00FFAA;
+      border-radius: 50%;
+      position: relative;
+      box-shadow: 0 0 30px #00FFAA40;
+      pointer-events: auto;
+    }
+    #radarCanvas {
+      width: 100%;
+      height: 100%;
+      border-radius: 50%;
+      background: #0a192f;
+    }
+
+    .target-info {
+      display: flex;
+      gap: 40px;
+      background: #0A192FCC;
+      backdrop-filter: blur(5px);
+      padding: 12px 30px;
+      border: 1px solid #00FFAA;
+      border-radius: 40px;
+      letter-spacing: 2px;
+    }
+    .target-info span {
+      color: #FF3B3B;
+      font-weight: 700;
+      margin-left: 8px;
+    }
+    .missile-count, .mission-timer {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .mission-timer i {
+      color: #FF3B3B;
+    }
+
+    /* enemy aircraft markers (tactical symbols) */
+    .enemy-sector {
+      position: absolute;
+      top: 0; left: 0; width: 100%; height: 100%;
+      z-index: 30;
+      pointer-events: none;
+    }
+    .enemy {
+      position: absolute;
+      width: 70px;
+      height: 70px;
+      pointer-events: auto;
+      cursor: crosshair;
+      filter: drop-shadow(0 0 12px #FF3B3B);
+      transition: transform 0.2s, filter 0.3s;
+      font-family: 'Orbitron', sans-serif;
+    }
+    .enemy.locked {
+      filter: drop-shadow(0 0 20px #00FFAA) drop-shadow(0 0 40px cyan);
+      transform: scale(1.1);
+    }
+    .enemy.destroyed {
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.3s;
+    }
+    .enemy-icon {
+      width: 100%;
+      height: 100%;
+      background: transparent;
+      border: 3px solid #FF3B3B;
+      border-radius: 20% 50% 20% 50%;
+      transform: rotate(45deg);
+      position: relative;
+      box-shadow: 0 0 15px red;
+    }
+    .enemy .label {
+      position: absolute;
+      bottom: -20px;
+      left: 50%;
+      transform: translateX(-50%);
+      color: #00FFAA;
+      font-weight: 700;
+      font-size: 14px;
+      text-shadow: 0 0 8px black;
+      background: #0A192FCC;
+      padding: 2px 8px;
+      border-radius: 12px;
+      border: 1px solid #00FFAA;
+      white-space: nowrap;
+    }
+    .enemy .icon-inner {
+      position: absolute;
+      top: 50%; left: 50%;
+      transform: translate(-50%, -50%) rotate(-45deg);
+      color: #FF3B3B;
+      font-size: 24px;
+    }
+
+    /* target lock box (appears when locked) */
+    .lock-indicator {
+      position: absolute;
+      border: 2px dashed #00FFAA;
+      border-radius: 4px;
+      box-shadow: 0 0 30px #00FFEE;
+      width: 90px;
+      height: 90px;
+      pointer-events: none;
+      z-index: 40;
+      display: none;
+    }
+
+    /* intel panel (revealed data) */
+    .intel-panel {
+      position: absolute;
+      bottom: 100px;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 600px;
+      max-width: 80vw;
+      background: #0A192FEE;
+      backdrop-filter: blur(10px);
+      border: 2px solid #00FFAA;
+      border-radius: 16px;
+      padding: 20px 30px;
+      color: #CCFFEE;
+      font-family: 'Rajdhani', sans-serif;
+      box-shadow: 0 0 60px #00FFAA40;
+      z-index: 100;
+      transition: all 0.3s ease;
+      text-align: left;
+      pointer-events: none;
+    }
+    .intel-panel.glitch {
+      animation: glitchReveal 0.4s cubic-bezier(0.25, 0.1, 0.25, 1) both;
+    }
+    @keyframes glitchReveal {
+      0% { transform: translateX(-50%) skew(0deg); opacity: 1; }
+      20% { transform: translateX(-48%) skew(5deg); border-color: #FF3B3B; text-shadow: 2px 0 red; }
+      40% { transform: translateX(-52%) skew(-5deg); border-color: cyan; text-shadow: -2px 0 blue; }
+      60% { transform: translateX(-49%) skew(3deg); }
+      80% { transform: translateX(-51%) skew(-2deg); }
+      100% { transform: translateX(-50%) skew(0deg); border-color: #00FFAA; }
+    }
+    .intel-title {
+      font-size: 28px;
+      font-weight: 700;
+      color: #00FFAA;
+      letter-spacing: 2px;
+      margin-bottom: 8px;
+      font-family: 'Orbitron';
+    }
+    .intel-content {
+      font-size: 18px;
+      line-height: 1.5;
+    }
+    .intel-content ul {
+      list-style: none;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px 20px;
+    }
+    .intel-content li::before {
+      content: "►";
+      color: #FF3B3B;
+      margin-right: 6px;
+    }
+
+    /* missile & explosion effects (canvas layer) */
+    .effects-layer {
+      position: absolute;
+      top: 0; left: 0;
+      width: 100%; height: 100%;
+      pointer-events: none;
+      z-index: 200;
+    }
+    #effectCanvas {
+      width: 100%; height: 100%;
+      display: block;
+    }
+
+    /* footer & download */
+    .footer {
+      position: absolute;
+      bottom: 15px;
+      left: 0;
+      width: 100%;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 0 40px;
+      color: #00FFAA80;
+      font-size: 16px;
+      z-index: 50;
+      pointer-events: none;
+    }
+    .footer button {
+      background: transparent;
+      border: 2px solid #FF3B3B;
+      color: #FF3B3B;
+      font-family: 'Orbitron';
+      font-weight: 700;
+      padding: 12px 24px;
+      border-radius: 40px;
+      font-size: 18px;
+      letter-spacing: 2px;
+      cursor: pointer;
+      box-shadow: 0 0 20px #FF3B3B60;
+      transition: 0.2s;
+      pointer-events: auto;
+      text-shadow: 0 0 8px black;
+    }
+    .footer button:hover {
+      background: #FF3B3B;
+      color: #0A192F;
+      box-shadow: 0 0 40px red;
+    }
+    .footer-message {
+      font-size: 14px;
+    }
+
+    /* key hints */
+    .keyhint {
+      position: absolute;
+      top: 30px; right: 30px;
+      background: #0A192FAA;
+      border: 1px solid #00FFAA;
+      border-radius: 8px;
+      padding: 8px 16px;
+      font-size: 14px;
+      color: #ccc;
+      z-index: 150;
+      backdrop-filter: blur(2px);
+    }
+    .keyhint kbd {
+      color: #00FFAA;
+      font-weight: 700;
+    }
+  </style>
+</head>
+<body>
+<div class="cockpit">
+  <!-- ambient clouds -->
+  <div class="cloud-layer"></div>
+  <div class="cloud cloud1"></div>
+  <div class="cloud cloud2"></div>
+  <div class="cloud cloud3"></div>
+
+  <!-- HUD top bar -->
+  <div class="hud-top">
+    <div class="radar-panel">
+      <canvas id="radarCanvas" width="180" height="180"></canvas>
+    </div>
+    <div class="target-info">
+      <div class="missile-count"><i class="fas fa-bullseye"></i> MSL <span id="missileDisplay">12</span></div>
+      <div class="mission-timer"><i class="fas fa-hourglass-half"></i> T– <span id="timerDisplay">10:00</span></div>
+    </div>
+  </div>
+
+  <!-- key binding hint -->
+  <div class="keyhint">
+    <kbd>🖱️ click</kbd> lock <kbd>␣</kbd> fire <kbd>P</kbd> pause <kbd>R</kbd> reset
+  </div>
+
+  <!-- enemy aircraft injected here by js -->
+  <div class="enemy-sector" id="enemySector"></div>
+
+  <!-- dynamic lock box -->
+  <div class="lock-indicator" id="lockBox"></div>
+
+  <!-- intel panel (revealed info) -->
+  <div class="intel-panel" id="intelPanel">
+    <div class="intel-title">TACTICAL INTEL</div>
+    <div class="intel-content" id="intelContent">Lock and destroy enemy to reveal dossier</div>
+  </div>
+
+  <!-- effects canvas for missile/explosion -->
+  <div class="effects-layer">
+    <canvas id="effectCanvas"></canvas>
+  </div>
+
+  <!-- footer -->
+  <div class="footer">
+    <span class="footer-message">Mission Driven. Nation Focused.   © 2026 Siddarthan R</span>
+    <button id="downloadBtn"><i class="fas fa-file-pdf"></i> DOWNLOAD CLASSIFIED DOSSIER</button>
+  </div>
+</div>
+
+<script>
+  (function() {
+    // ---------- SPECIFICATION DATA ----------
+    const enemiesData = [
+      {
+        label: 'ABOUT',
+        reveal: {
+          name: 'Siddarthan R',
+          degree: 'B.E Electronics and Communication Engineering',
+          year: '3rd Year',
+          career_goal: 'To serve in DRDO and contribute to India\'s defence technology through Embedded AI systems.'
+        }
+      },
+      {
+        label: 'SKILLS',
+        reveal: {
+          technical_skills: ['Embedded C', 'Microcontrollers (ARM, AVR)', 'RTOS Basics', 'Signal Processing Fundamentals', 'AI for Embedded Systems', 'Sensor Integration', 'UART, SPI, I2C', 'PCB Basics'],
+          software_tools: ['Keil', 'Proteus', 'MATLAB', 'VS Code', 'Git']
+        }
+      },
+      {
+        label: 'PROJECT',
+        reveal: {
+          project_title: 'AI Based Anti-Jamming Detection Prototype',
+          description: 'Developed an intelligent embedded prototype that detects signal jamming attempts using anomaly detection algorithms.',
+          features: ['Real-time signal monitoring', 'Frequency deviation detection', 'Alert generation system', 'Potential defence communication protection'],
+          future_scope: 'Integration with military communication modules for adaptive frequency hopping.'
+        }
+      },
+      {
+        label: 'MISSION',
+        reveal: {
+          vision: 'Build indigenous defence AI systems for secure battlefield communication.',
+          aspiration: 'Join DRDO as a Scientist and contribute to national security.',
+          long_term_goal: 'Develop AI-driven autonomous defence systems.'
+        }
+      }
+    ];
+
+    // positions for enemy markers (centered around canopy)
+    const positions = [
+      { top: '35%', left: '25%' },
+      { top: '20%', left: '70%' },
+      { top: '60%', left: '30%' },
+      { top: '55%', left: '75%' }
+    ];
+
+    // state
+    let enemies = [];
+    let lockedTarget = null;          // DOM element of locked enemy
+    let pauseAnimations = false;
+    let missileCount = 12;
+    let timerSeconds = 600; // 10:00
+    let timerInterval;
+    let radarRotation = 0;
+    let radarCtx = document.getElementById('radarCanvas').getContext('2d');
+    let effectCanvas = document.getElementById('effectCanvas');
+    let effectCtx = effectCanvas.getContext('2d');
+    effectCanvas.width = window.innerWidth;
+    effectCanvas.height = window.innerHeight;
+    let animationFrame;
+    let explosionAnim = []; // simple particle array
+
+    // DOM elements
+    const enemySector = document.getElementById('enemySector');
+    const lockBox = document.getElementById('lockBox');
+    const intelPanel = document.getElementById('intelPanel');
+    const intelContent = document.getElementById('intelContent');
+    const missileSpan = document.getElementById('missileDisplay');
+    const timerSpan = document.getElementById('timerDisplay');
+
+    // create enemy markers
+    function buildEnemies() {
+      enemySector.innerHTML = '';
+      enemiesData.forEach((item, idx) => {
+        const enemyDiv = document.createElement('div');
+        enemyDiv.className = 'enemy';
+        enemyDiv.dataset.label = item.label;
+        enemyDiv.dataset.index = idx;
+        enemyDiv.style.top = positions[idx].top;
+        enemyDiv.style.left = positions[idx].left;
+
+        // icon
+        const iconDiv = document.createElement('div');
+        iconDiv.className = 'enemy-icon';
+        const innerIcon = document.createElement('div');
+        innerIcon.className = 'icon-inner';
+        innerIcon.innerHTML = '<i class="fas fa-fighter-jet"></i>';
+        iconDiv.appendChild(innerIcon);
+        enemyDiv.appendChild(iconDiv);
+
+        const labelSpan = document.createElement('span');
+        labelSpan.className = 'label';
+        labelSpan.innerText = item.label;
+        enemyDiv.appendChild(labelSpan);
+
+        // click handler: lock target
+        enemyDiv.addEventListener('click', (e) => {
+          e.stopPropagation();
+          if (pauseAnimations) return;
+          if (enemyDiv.classList.contains('destroyed')) return;
+
+          // remove lock from previous
+          if (lockedTarget) {
+            lockedTarget.classList.remove('locked');
+          }
+          // lock new
+          enemyDiv.classList.add('locked');
+          lockedTarget = enemyDiv;
+          // position lock box around it
+          const rect = enemyDiv.getBoundingClientRect();
+          lockBox.style.display = 'block';
+          lockBox.style.width = rect.width + 20 + 'px';
+          lockBox.style.height = rect.height + 20 + 'px';
+          lockBox.style.top = rect.top - 10 + 'px';
+          lockBox.style.left = rect.left - 10 + 'px';
+        });
+
+        enemySector.appendChild(enemyDiv);
+        enemies.push(enemyDiv);
+      });
+    }
+
+    // show intel from destroyed enemy
+    function revealIntel(index) {
+      const data = enemiesData[index].reveal;
+      let html = '';
+      if (data.name) {
+        html = `<strong>${data.name}</strong><br>${data.degree}, ${data.year}<br>▸ ${data.career_goal}`;
+      } else if (data.technical_skills) {
+        html = `<strong>Technical Skills</strong><ul>${data.technical_skills.map(s => '<li>'+s+'</li>').join('')}</ul>`;
+        html += `<strong>Tools</strong> <span style="color:#00FFAA;">${data.software_tools.join(' • ')}</span>`;
+      } else if (data.project_title) {
+        html = `<strong>${data.project_title}</strong><br>${data.description}<br><br>`;
+        html += `<u>Features</u> <ul>${data.features.map(f => '<li>'+f+'</li>').join('')}</ul>`;
+        html += `<span style="color:#FF3B3B;">Future: ${data.future_scope}</span>`;
+      } else if (data.vision) {
+        html = `<strong>Vision:</strong> ${data.vision}<br><strong>Aspiration:</strong> ${data.aspiration}<br><strong>Long term:</strong> ${data.long_term_goal}`;
+      }
+      intelContent.innerHTML = html;
+      intelPanel.classList.add('glitch');
+      setTimeout(() => intelPanel.classList.remove('glitch'), 500);
+    }
+
+    // launch missile from player (bottom center) to locked target
+    function launchMissile() {
+      if (!lockedTarget || lockedTarget.classList.contains('destroyed') || missileCount <= 0 || pauseAnimations) return;
+      missileCount--;
+      missileSpan.innerText = missileCount;
+
+      const targetRect = lockedTarget.getBoundingClientRect();
+      const startX = window.innerWidth / 2;
+      const startY = window.innerHeight - 100;
+
+      // draw missile trail on effect canvas
+      let progress = 0;
+      function drawTrail() {
+        if (progress >= 1 || !lockedTarget || pauseAnimations) return;
+        progress += 0.02;
+        const currentX = startX + (targetRect.left + targetRect.width/2 - startX) * progress;
+        const currentY = startY + (targetRect.top + targetRect.height/2 - startY) * progress;
+
+        effectCtx.clearRect(0, 0, effectCanvas.width, effectCanvas.height);
+        effectCtx.beginPath();
+        effectCtx.moveTo(startX, startY);
+        effectCtx.lineTo(currentX, currentY);
+        effectCtx.strokeStyle = '#FF3B3B';
+        effectCtx.lineWidth = 4;
+        effectCtx.shadowBlur = 20;
+        effectCtx.shadowColor = '#FFAA00';
+        effectCtx.stroke();
+        // particle effect
+        effectCtx.beginPath();
+        effectCtx.arc(currentX, currentY, 8, 0, 2*Math.PI);
+        effectCtx.fillStyle = 'orange';
+        effectCtx.shadowBlur = 30;
+        effectCtx.fill();
+
+        if (progress < 1) {
+          requestAnimationFrame(drawTrail);
+        } else {
+          // impact: destroy enemy
+          effectCtx.clearRect(0, 0, effectCanvas.width, effectCanvas.height);
+          destroyCurrentTarget();
+        }
+      }
+      drawTrail();
+    }
+
+    function destroyCurrentTarget() {
+      if (!lockedTarget || lockedTarget.classList.contains('destroyed')) return;
+      const idx = lockedTarget.dataset.index;
+      lockedTarget.classList.add('destroyed');
+      revealIntel(parseInt(idx));
+
+      // explosion effect on canvas
+      const rect = lockedTarget.getBoundingClientRect();
+      const x = rect.left + rect.width/2;
+      const y = rect.top + rect.height/2;
+      for (let i=0; i<10; i++) {
+        explosionAnim.push({x, y, vx: (Math.random()-0.5)*10, vy: (Math.random()-1)*10, life: 1.0});
+      }
+      function animateExplosion() {
+        effectCtx.clearRect(0, 0, effectCanvas.width, effectCanvas.height);
+        for (let i=explosionAnim.length-1; i>=0; i--) {
+          let p = explosionAnim[i];
+          p.x += p.vx;
+          p.y += p.vy;
+          p.life -= 0.02;
+          effectCtx.beginPath();
+          effectCtx.arc(p.x, p.y, 6 * p.life, 0, 2*Math.PI);
+          effectCtx.fillStyle = `rgba(255, 80, 0, ${p.life})`;
+          effectCtx.shadowBlur = 20;
+          effectCtx.fill();
+          if (p.life <= 0) explosionAnim.splice(i,1);
+        }
+        if (explosionAnim.length) requestAnimationFrame(animateExplosion);
+        else effectCtx.clearRect(0, 0, effectCanvas.width, effectCanvas.height);
+      }
+      animateExplosion();
+
+      lockedTarget.classList.remove('locked');
+      lockBox.style.display = 'none';
+      lockedTarget = null;
+    }
+
+    // reset mission (restore enemies)
+    function resetMission() {
+      enemies.forEach((en, idx) => {
+        en.classList.remove('destroyed', 'locked');
+      });
+      intelContent.innerHTML = 'Lock and destroy enemy to reveal dossier';
+      missileCount = 12;
+      missileSpan.innerText = missileCount;
+      lockedTarget = null;
+      lockBox.style.display = 'none';
+      effectCtx.clearRect(0,0,effectCanvas.width,effectCanvas.height);
+    }
+
+    // radar animation
+    function updateRadar() {
+      if (!pauseAnimations) {
+        radarRotation = (radarRotation + 0.02) % (2 * Math.PI);
+      }
+      radarCtx.clearRect(0,0,180,180);
+      // draw grid
+      radarCtx.strokeStyle = '#00FFAA40';
+      radarCtx.lineWidth = 1;
+      radarCtx.beginPath();
+      for (let r=1; r<=3; r++) {
+        radarCtx.arc(90,90, r*30, 0, 2*Math.PI);
+        radarCtx.stroke();
+      }
+      radarCtx.beginPath();
+      radarCtx.moveTo(0,90); radarCtx.lineTo(180,90);
+      radarCtx.moveTo(90,0); radarCtx.lineTo(90,180);
+      radarCtx.stroke();
+
+      // rotating scan line
+      radarCtx.beginPath();
+      radarCtx.moveTo(90,90);
+      radarCtx.lineTo(90 + 80 * Math.cos(radarRotation), 90 + 80 * Math.sin(radarRotation));
+      radarCtx.strokeStyle = '#00FFAA';
+      radarCtx.lineWidth = 2;
+      radarCtx.shadowBlur = 12;
+      radarCtx.shadowColor = '#00FFAA';
+      radarCtx.stroke();
+
+      // draw enemy blips (simplified: random blips but we use existing enemies)
+      enemies.forEach((en, i) => {
+        if (!en.classList.contains('destroyed')) {
+          let angle = (i * 1.5 + radarRotation) % (2*Math.PI);
+          let dist = 30 + (i*12);
+          let x = 90 + dist * Math.cos(angle);
+          let y = 90 + dist * Math.sin(angle);
+          radarCtx.beginPath();
+          radarCtx.arc(x, y, 4, 0, 2*Math.PI);
+          radarCtx.fillStyle = '#FF3B3B';
+          radarCtx.shadowBlur = 12;
+          radarCtx.fill();
+        }
+      });
+
+      requestAnimationFrame(updateRadar);
+    }
+
+    // timer countdown
+    function startTimer() {
+      timerInterval = setInterval(() => {
+        if (!pauseAnimations) {
+          if (timerSeconds > 0) timerSeconds--;
+          let mins = Math.floor(timerSeconds/60);
+          let secs = timerSeconds%60;
+          timerSpan.innerText = `${mins.toString().padStart(2,'0')}:${secs.toString().padStart(2,'0')}`;
+        }
+      }, 1000);
+    }
+
+    // keyboard controls
+    window.addEventListener('keydown', (e) => {
+      if (e.code === 'Space') {
+        e.preventDefault();
+        launchMissile();
+      } else if (e.code === 'KeyP') {
+        e.preventDefault();
+        pauseAnimations = !pauseAnimations;
+      } else if (e.code === 'KeyR') {
+        e.preventDefault();
+        resetMission();
+      }
+    });
+
+    // download dummy PDF
+    document.getElementById('downloadBtn').addEventListener('click', () => {
+      alert('[CLASSIFIED DOSSIER] — Secure download started (demo)');
+      // In real scenario, would open a PDF.
+    });
+
+    // resize canvas
+    window.addEventListener('resize', () => {
+      effectCanvas.width = window.innerWidth;
+      effectCanvas.height = window.innerHeight;
+    });
+
+    // init
+    buildEnemies();
+    startTimer();
+    updateRadar();
+
+    // clean up lock box when no target
+    window.addEventListener('click', (e) => {
+      if (!e.target.closest('.enemy')) {
+        if (lockedTarget) lockedTarget.classList.remove('locked');
+        lockedTarget = null;
+        lockBox.style.display = 'none';
+      }
+    });
+
+  })();
+</script>
+</body>
+</html>
